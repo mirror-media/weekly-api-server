@@ -1,0 +1,40 @@
+{
+  "name": "weekly-api-server",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "make dev",
+    "build": "make build",
+    "start": "make start",
+    "lint": "make lint",
+    "prepare": "husky install"
+  },
+  "engines": {
+    "node": ">=14.0.0 <21.0.0"
+  },
+  "dependencies": {
+    "@google-cloud/secret-manager": "^5.0.1",
+    "@twreporter/errors": "^1.1.2",
+    "axios": "^1.4.0",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "firebase-admin": "^11.4.1",
+    "http-proxy-middleware": "^2.0.6",
+    "jsonwebtoken": "^9.0.0"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.20.7",
+    "@babel/core": "^7.20.12",
+    "@babel/node": "^7.20.7",
+    "@babel/preset-env": "^7.20.2",
+    "nodemon": "^2.0.20",
+    "eslint": "8.22.0",
+    "eslint-config-prettier": "^8.5.0",
+    "eslint-plugin-prettier": "^4.2.1",
+    "husky": "^8.0.0",
+    "lint-staged": "^13.0.3",
+    "prettier": "^2.7.1"
+  },
+  "lint-staged": {
+    "*.{js,jsx}": "eslint --cache --fix"
+  }
+}
