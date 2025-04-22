@@ -216,6 +216,7 @@ function isInternalColleage(decodedIdToken = {}) {
     '@mirrormedia.mg',
     '@mnews.com.tw',
     '@mnews.tw',
+	'@mirrordaily.news',
     '@mirrorfiction.com',
   ]
 
