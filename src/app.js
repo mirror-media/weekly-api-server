@@ -50,6 +50,7 @@ export function createApp({
   youtubeProxyOrigin,
   israfelHeadlessAccount,
   contentGQLHeadlessAccount, // eslint-disable-line no-unused-vars
+  bypassAuthorization = false,
 }) {
   // create express app
   const app = express()
@@ -157,6 +158,7 @@ export function createApp({
       jwtSecret,
       proxyOrigin: weeklyProxyOrigin,
       proxyPath: '/content/graphql',
+      bypassAuthorization,
     })
   )
 
@@ -178,6 +180,7 @@ export function createApp({
       proxyOrigin: israfelProxyOrigin,
       proxyPath: '/member/graphql',
       sessionTokenKey: sessionTokenKey.member,
+      bypassAuthorization,
     })
   )
 

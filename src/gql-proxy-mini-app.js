@@ -22,6 +22,7 @@ export function createGraphQLProxy({
   proxyOrigin,
   proxyPath,
   sessionTokenKey,
+  bypassAuthorization = false,
 }) {
   // create express mini app
   const router = express.Router()
@@ -39,8 +40,8 @@ export function createGraphQLProxy({
     // verify access token if needed
     /** @type {express.RequestHandler} */
     (req, res, next) => {
-      // if request contains `Authorization` header, and then we verify it.
-      if (req.header('Authorization')) {
+      // Skip verification when bypass flag is enabled
+      if (!bypassAuthorization && req.header('Authorization')) {
         verifyAccessToken(req, res, next)
         return
       }
@@ -62,7 +63,13 @@ export function createGraphQLProxy({
       onProxyReq: (proxyReq, req, res) => {
         // @ts-ignore `res.locals` is not defined in 'http-proxy-middleware' pkg,
         // but it does exist in 'express' res object.
-        const scope = res?.locals?.auth?.decodedAccessToken?.scope || ''
+        let scope = res?.locals?.auth?.decodedAccessToken?.scope || ''
+
+        // When bypass is enabled, grant full content scope to all requests
+        if (bypassAuthorization) {
+          scope = 'read:posts read:member-posts:all'
+        }
+
         proxyReq.setHeader('X-Access-Token-Scope', scope)
 
         if (sessionTokenKey) {

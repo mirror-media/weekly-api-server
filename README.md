@@ -52,3 +52,10 @@ $ yarn start
 
 ### 環境變數設定
 請見檔案 [`/src/environment-variables.js`](/src/environment-variables.js)
+
+#### 臨時繞過授權驗證（bypass）
+- 設定環境變數 `BYPASS_AUTHORIZATION` 為 `true` 或 `1` 可啟用。
+- 啟用後：
+  - `/content/graphql` 與 `/member/graphql` 皆不再驗證 `Authorization` header。
+  - 代理請求時會將 `X-Access-Token-Scope` 設為 `read:posts read:member-posts:all`，等同所有使用者可讀取所有內容。
+- 風險：此設定將開放所有內容，僅供開發/臨時除錯使用，請勿於正式環境長期開啟。

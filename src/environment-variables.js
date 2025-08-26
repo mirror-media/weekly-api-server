@@ -10,6 +10,7 @@ const {
   YOUTUBE_ORIGIN,
   SECRET_RESOURCE_ID,
   RELEASE_BRANCH,
+  BYPASS_AUTHORIZATION,
 } = process.env
 
 /**
@@ -62,6 +63,9 @@ const envVar = {
     SECRET_RESOURCE_ID ||
     'projects/983956931553/secrets/dev-weekly-api-server/versions/1',
   releaseBranch: RELEASE_BRANCH || 'prod',
+  // Enable to bypass access-token verification and grant full content scope
+  bypassAuthorization:
+    BYPASS_AUTHORIZATION === 'true' || BYPASS_AUTHORIZATION === '1',
 }
 
 export default envVar
