@@ -67,6 +67,7 @@ async function start() {
       youtubeProxyOrigin: envVar.youtube.origin,
       israfelHeadlessAccount,
       contentGQLHeadlessAccount,
+      bypassAuthorization: envVar.bypassAuthorization,
     })
     server = http.createServer(app).listen(port, () => {
       console.log(
