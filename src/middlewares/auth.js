@@ -138,6 +138,7 @@ export function signAccessToken({ jwtSecret, jwtLifeTime }) {
       case 'marketing':
       case 'subscribe_group':
       case 'subscribe_yearly':
+      case 'subscribe_halfyearly':
       case 'subscribe_monthly': {
         roles = ['premium-member']
         scope = `read:posts read:member-posts:all read:member-info:${firebaseId} write:member-info:${firebaseId}`
