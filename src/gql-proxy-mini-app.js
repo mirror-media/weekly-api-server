@@ -68,6 +68,7 @@ export function createGraphQLProxy({
   sessionTokenKey,
   bypassAuthorization = false,
   internalApiKey = '',
+  allowAuthenticatedMutations = false,
 }) {
   // create express mini app
   const router = express.Router()
@@ -102,10 +103,10 @@ export function createGraphQLProxy({
     },
 
     // Reject writes from the public internet. A GraphQL mutation is allowed
-    // only when the caller is either (a) an authenticated user — the previous
-    // middleware set res.locals.auth from a valid access token (e.g. a logged-in
-    // member on /member/graphql), or (b) an internal writer presenting the
-    // shared key. Read-only queries are always allowed. Without this gate the
+    // only when the caller is (a) an authenticated user on a proxy that opts
+    // in via `allowAuthenticatedMutations` (the member proxy, where Israfel's
+    // own ACL still applies), or (b) an internal writer presenting the shared
+    // key. Read-only queries are always allowed. Without this gate the
     // backend CMS (gql strategy) applies no write access control, so anyone
     // could create/update/delete.
     /** @type {express.RequestHandler} */
@@ -114,7 +115,10 @@ export function createGraphQLProxy({
         next()
         return
       }
-      if (res?.locals?.auth) {
+      // Only the member proxy may accept end-user tokens for writes;
+      // /access-token signs a token for any Firebase login, which must not
+      // grant CMS (content) write access.
+      if (allowAuthenticatedMutations && res?.locals?.auth) {
         next()
         return
       }

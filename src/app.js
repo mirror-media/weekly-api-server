@@ -186,6 +186,7 @@ export function createApp({
       sessionTokenKey: sessionTokenKey.member,
       bypassAuthorization,
       internalApiKey,
+      allowAuthenticatedMutations: true,
     })
   )
 
