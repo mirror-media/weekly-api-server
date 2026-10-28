@@ -11,6 +11,7 @@ const {
   SECRET_RESOURCE_ID,
   RELEASE_BRANCH,
   BYPASS_AUTHORIZATION,
+  INTERNAL_API_KEY,
 } = process.env
 
 /**
@@ -66,6 +67,9 @@ const envVar = {
   // Enable to bypass access-token verification and grant full content scope
   bypassAuthorization:
     BYPASS_AUTHORIZATION === 'true' || BYPASS_AUTHORIZATION === '1',
+  // Shared secret the internal writers (weekly-external, data-services) must
+  // present in the `X-Internal-Api-Key` header to run GraphQL mutations.
+  internalApiKey: INTERNAL_API_KEY || '',
 }
 
 export default envVar

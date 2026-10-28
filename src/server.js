@@ -68,6 +68,7 @@ async function start() {
       israfelHeadlessAccount,
       contentGQLHeadlessAccount,
       bypassAuthorization: envVar.bypassAuthorization,
+  internalApiKey: envVar.internalApiKey,
     })
     server = http.createServer(app).listen(port, () => {
       console.log(

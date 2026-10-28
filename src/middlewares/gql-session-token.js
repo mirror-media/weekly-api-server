@@ -1,7 +1,29 @@
 import axios from 'axios'
 import errors from '@twreporter/errors'
 import express from 'express' // eslint-disable-line
+import jwt from 'jsonwebtoken'
 import { sessionTokenKey } from '../constants'
+
+/**
+ * Soft-verify an access token from the Authorization header.
+ * Returns true only for a present, valid Bearer JWT. Never throws.
+ * @param {import('express').Request} req
+ * @param {string} jwtSecret
+ * @returns {boolean}
+ */
+function hasValidAccessToken(req, jwtSecret) {
+  try {
+    const bearer = req.header('Authorization') || ''
+    const [, token] = bearer.match(/Bearer (.*)/) || []
+    if (!token || !jwtSecret) {
+      return false
+    }
+    jwt.verify(token, jwtSecret)
+    return true
+  } catch (err) {
+    return false
+  }
+}
 
 class IsrafelSessionTokenManager {
   /** @type {IsrafelSessionTokenManager} */
@@ -117,10 +139,21 @@ mutation {
 export function createIsrafelSessionTokenMw({
   apiUrl,
   headlessAccount: { email, password },
+  jwtSecret = '',
+  onlyWhenAuthenticated = false,
 }) {
   const tokenManager = IsrafelSessionTokenManager.getInstance(apiUrl)
   return async (req, res, next) => {
     try {
+      // When guarding the public member proxy, only attach the internal
+      // headless-account session for requests that carry a valid access
+      // token. Anonymous requests are forwarded without it, so Israfel's
+      // own access control — not our privileged account — decides what they
+      // may read.
+      if (onlyWhenAuthenticated && !hasValidAccessToken(req, jwtSecret)) {
+        next()
+        return
+      }
       const key = sessionTokenKey.member
       const sessionToken = await tokenManager.getSessionToken(email, password)
       res.locals[key] = sessionToken

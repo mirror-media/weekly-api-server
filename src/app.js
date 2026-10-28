@@ -51,6 +51,7 @@ export function createApp({
   israfelHeadlessAccount,
   contentGQLHeadlessAccount, // eslint-disable-line no-unused-vars
   bypassAuthorization = false,
+  internalApiKey = '',
 }) {
   // create express app
   const app = express()
@@ -159,6 +160,7 @@ export function createApp({
       proxyOrigin: weeklyProxyOrigin,
       proxyPath: '/content/graphql',
       bypassAuthorization,
+      internalApiKey,
     })
   )
 
@@ -170,6 +172,8 @@ export function createApp({
     middlewareCreator.createIsrafelSessionTokenMw({
       apiUrl: israfelProxyOrigin + '/api/graphql',
       headlessAccount: israfelHeadlessAccount,
+      jwtSecret,
+      onlyWhenAuthenticated: true,
     })
   )
 
@@ -181,6 +185,7 @@ export function createApp({
       proxyPath: '/member/graphql',
       sessionTokenKey: sessionTokenKey.member,
       bypassAuthorization,
+      internalApiKey,
     })
   )
 

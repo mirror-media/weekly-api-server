@@ -1,6 +1,7 @@
 import { statusCodes } from './constants'
 // @ts-ignore `@twreporter/errors` does not have tyepscript definition file yet
 import errors from '@twreporter/errors'
+import crypto from 'crypto'
 import express from 'express'
 import middlewareCreator from './middlewares'
 import { createProxyMiddleware } from 'http-proxy-middleware'
@@ -17,12 +18,49 @@ import { createProxyMiddleware } from 'http-proxy-middleware'
  *  @param {string} [opts.sessionTokenKey]
  *  @returns {express.Router}
  */
+/**
+ * Decide whether a GraphQL request body contains a mutation operation.
+ * An anonymous shorthand document (`{ ... }`) and the `query`/`subscription`
+ * keywords are reads; only a top-level `mutation` operation is a write.
+ * Comments and string literals are stripped first so keywords inside them
+ * cannot flip the result.
+ * @param {unknown} query
+ * @returns {boolean}
+ */
+function isMutation(query) {
+  if (typeof query !== 'string') {
+    // No parseable operation: treat as non-read and let the backend reject it.
+    return true
+  }
+  const stripped = query
+    .replace(/"(?:\\.|[^"\\])*"/g, '') // double-quoted strings
+    .replace(/#[^\n]*/g, '') // line comments
+    .trim()
+  return /(^|[\s}])mutation\b/.test(stripped)
+}
+
+/**
+ * Constant-time string comparison that never throws on length mismatch.
+ * @param {string} a
+ * @param {string} b
+ * @returns {boolean}
+ */
+function timingSafeEqualStr(a, b) {
+  const bufA = Buffer.from(String(a))
+  const bufB = Buffer.from(String(b))
+  if (bufA.length !== bufB.length) {
+    return false
+  }
+  return crypto.timingSafeEqual(bufA, bufB)
+}
+
 export function createGraphQLProxy({
   jwtSecret,
   proxyOrigin,
   proxyPath,
   sessionTokenKey,
   bypassAuthorization = false,
+  internalApiKey = '',
 }) {
   // create express mini app
   const router = express.Router()
@@ -49,6 +87,38 @@ export function createGraphQLProxy({
       // Otherwise, we skip authorization.
       // get to next middleware
       next()
+    },
+
+    // Reject writes from the public internet. A GraphQL mutation is allowed
+    // only when the caller is either (a) an authenticated user — the previous
+    // middleware set res.locals.auth from a valid access token (e.g. a logged-in
+    // member on /member/graphql), or (b) an internal writer presenting the
+    // shared key. Read-only queries are always allowed. Without this gate the
+    // backend CMS (gql strategy) applies no write access control, so anyone
+    // could create/update/delete.
+    /** @type {express.RequestHandler} */
+    (req, res, next) => {
+      if (!isMutation(req?.body?.query)) {
+        next()
+        return
+      }
+      if (res?.locals?.auth) {
+        next()
+        return
+      }
+      const presentedKey = req.header('X-Internal-Api-Key') || ''
+      if (
+        internalApiKey &&
+        presentedKey &&
+        timingSafeEqualStr(presentedKey, internalApiKey)
+      ) {
+        next()
+        return
+      }
+      res.status(statusCodes.unauthorized).send({
+        status: 'error',
+        error: 'Mutations require authentication or a valid internal API key.',
+      })
     },
 
     // proxy request to API GraphQL endpoint
@@ -87,9 +157,6 @@ export function createGraphQLProxy({
               proxyOrigin +
               proxyReq.path,
             ...res?.locals?.globalLogFields,
-            debugPayload: {
-              'req.headers': proxyReq.getHeaders(),
-            },
           })
         )
       },
