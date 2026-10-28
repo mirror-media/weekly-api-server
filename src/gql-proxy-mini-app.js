@@ -33,8 +33,10 @@ function isMutation(query) {
     return true
   }
   const stripped = query
+    .replace(/"""[\s\S]*?"""/g, '') // block strings first: stray quotes inside must not desync the next rule
     .replace(/"(?:\\.|[^"\\])*"/g, '') // double-quoted strings
     .replace(/#[^\n]*/g, '') // line comments
+    .replace(/[,\uFEFF]/g, ' ') // commas and BOM are ignored tokens in GraphQL: normalize so `,mutation` cannot slip through
     .trim()
   return /(^|[\s}])mutation\b/.test(stripped)
 }
