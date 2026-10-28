@@ -158,6 +158,10 @@ export function createGraphQLProxy({
 
         proxyReq.setHeader('X-Access-Token-Scope', scope)
 
+        // The internal key is only meaningful to this proxy: never forward
+        // it, so it cannot end up in upstream logs or error payloads.
+        proxyReq.removeHeader('X-Internal-Api-Key')
+
         if (sessionTokenKey) {
           const sessionToken = res.locals[sessionTokenKey]
           // remove Authorization header to prevent authenication fail on gql side
