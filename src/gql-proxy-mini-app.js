@@ -5,7 +5,7 @@ import crypto from 'crypto'
 import express from 'express'
 import { parse as parseGraphQL } from 'graphql'
 import middlewareCreator from './middlewares'
-import { createProxyMiddleware, fixRequestBody } from 'http-proxy-middleware'
+import { createProxyMiddleware } from 'http-proxy-middleware'
 
 /**
  *  This function creates a mini app.
@@ -44,6 +44,30 @@ function isMutation(query) {
   } catch (err) {
     return true
   }
+}
+
+/**
+ * Re-send the body consumed by `express.json()` to the upstream request.
+ * Unlike http-proxy-middleware's `fixRequestBody`, this does not re-check
+ * the Content-Type header (whose case-insensitive variants express parses
+ * but `fixRequestBody` misses, leaving the upstream waiting for a body),
+ * and it normalizes the framing headers so chunked requests are not
+ * forwarded with both Transfer-Encoding and Content-Length.
+ * @param {import('http').ClientRequest} proxyReq
+ * @param {import('express').Request} req
+ */
+function replayParsedBody(proxyReq, req) {
+  // `_body` is set by body-parser once it has consumed the stream.
+  // @ts-ignore express sets this flag at runtime
+  if (!req._body || req.body === undefined) {
+    return
+  }
+  const body = JSON.stringify(req.body)
+  proxyReq.removeHeader('Transfer-Encoding')
+  proxyReq.removeHeader('Content-Encoding')
+  proxyReq.setHeader('Content-Type', 'application/json')
+  proxyReq.setHeader('Content-Length', Buffer.byteLength(body))
+  proxyReq.write(body)
 }
 
 /**
@@ -183,7 +207,7 @@ export function createGraphQLProxy({
         // express.json() consumed the request stream: re-send the parsed
         // body. Must run after every setHeader above — it writes the body,
         // which flushes the headers.
-        fixRequestBody(proxyReq, req)
+        replayParsedBody(proxyReq, req)
       },
       onError: (
         err,
