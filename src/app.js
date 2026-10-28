@@ -173,6 +173,7 @@ export function createApp({
       apiUrl: israfelProxyOrigin + '/api/graphql',
       headlessAccount: israfelHeadlessAccount,
       jwtSecret,
+      internalApiKey,
       onlyWhenAuthenticated: true,
     })
   )

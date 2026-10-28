@@ -1,6 +1,7 @@
 import axios from 'axios'
 import errors from '@twreporter/errors'
 import express from 'express' // eslint-disable-line
+import crypto from 'crypto'
 import jwt from 'jsonwebtoken'
 import { sessionTokenKey } from '../constants'
 
@@ -23,6 +24,22 @@ function hasValidAccessToken(req, jwtSecret) {
   } catch (err) {
     return false
   }
+}
+
+/**
+ * Constant-time check of the shared internal key header.
+ * @param {import('express').Request} req
+ * @param {string} internalApiKey
+ * @returns {boolean}
+ */
+function hasValidInternalKey(req, internalApiKey) {
+  const presented = req.header('X-Internal-Api-Key') || ''
+  if (!internalApiKey || !presented) {
+    return false
+  }
+  const bufA = Buffer.from(presented)
+  const bufB = Buffer.from(internalApiKey)
+  return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB)
 }
 
 class IsrafelSessionTokenManager {
@@ -140,6 +157,7 @@ export function createIsrafelSessionTokenMw({
   apiUrl,
   headlessAccount: { email, password },
   jwtSecret = '',
+  internalApiKey = '',
   onlyWhenAuthenticated = false,
 }) {
   const tokenManager = IsrafelSessionTokenManager.getInstance(apiUrl)
@@ -147,10 +165,15 @@ export function createIsrafelSessionTokenMw({
     try {
       // When guarding the public member proxy, only attach the internal
       // headless-account session for requests that carry a valid access
-      // token. Anonymous requests are forwarded without it, so Israfel's
-      // own access control — not our privileged account — decides what they
-      // may read.
-      if (onlyWhenAuthenticated && !hasValidAccessToken(req, jwtSecret)) {
+      // token or the shared internal key (trusted server-side callers such
+      // as the papermag order flow). Anonymous requests are forwarded
+      // without it, so Israfel's own access control — not our privileged
+      // account — decides what they may read.
+      if (
+        onlyWhenAuthenticated &&
+        !hasValidAccessToken(req, jwtSecret) &&
+        !hasValidInternalKey(req, internalApiKey)
+      ) {
         next()
         return
       }
