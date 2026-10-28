@@ -5,7 +5,7 @@ import crypto from 'crypto'
 import express from 'express'
 import { parse as parseGraphQL } from 'graphql'
 import middlewareCreator from './middlewares'
-import { createProxyMiddleware } from 'http-proxy-middleware'
+import { createProxyMiddleware, fixRequestBody } from 'http-proxy-middleware'
 
 /**
  *  This function creates a mini app.
@@ -81,6 +81,11 @@ export function createGraphQLProxy({
 
   router.post(
     proxyPath,
+
+    // Express does not parse request bodies by itself; the mutation gate
+    // below needs `req.body.query`. The consumed stream is replayed to the
+    // upstream by `fixRequestBody` in `onProxyReq`.
+    express.json({ limit: '2mb' }),
 
     // verify access token if needed
     /** @type {express.RequestHandler} */
@@ -166,6 +171,11 @@ export function createGraphQLProxy({
             ...res?.locals?.globalLogFields,
           })
         )
+
+        // express.json() consumed the request stream: re-send the parsed
+        // body. Must run after every setHeader above — it writes the body,
+        // which flushes the headers.
+        fixRequestBody(proxyReq, req)
       },
       onError: (
         err,
