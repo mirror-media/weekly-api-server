@@ -3,6 +3,7 @@ import { statusCodes } from './constants'
 import errors from '@twreporter/errors'
 import crypto from 'crypto'
 import express from 'express'
+import { parse as parseGraphQL } from 'graphql'
 import middlewareCreator from './middlewares'
 import { createProxyMiddleware } from 'http-proxy-middleware'
 
@@ -19,26 +20,30 @@ import { createProxyMiddleware } from 'http-proxy-middleware'
  *  @returns {express.Router}
  */
 /**
- * Decide whether a GraphQL request body contains a mutation operation.
- * An anonymous shorthand document (`{ ... }`) and the `query`/`subscription`
- * keywords are reads; only a top-level `mutation` operation is a write.
- * Comments and string literals are stripped first so keywords inside them
- * cannot flip the result.
+ * Decide whether a GraphQL request body contains a mutation operation,
+ * using the same grammar the backend executes (graphql-js `parse`), so
+ * lexer quirks (ignored commas/BOM, comments, block strings, multiple
+ * operations selected via `operationName`) cannot produce a document that
+ * reads as a query here but executes as a mutation upstream.
+ * Unparseable input is treated as a mutation (fail closed) and left for
+ * the backend to reject.
  * @param {unknown} query
  * @returns {boolean}
  */
 function isMutation(query) {
   if (typeof query !== 'string') {
-    // No parseable operation: treat as non-read and let the backend reject it.
     return true
   }
-  const stripped = query
-    .replace(/"""[\s\S]*?"""/g, '') // block strings first: stray quotes inside must not desync the next rule
-    .replace(/"(?:\\.|[^"\\])*"/g, '') // double-quoted strings
-    .replace(/#[^\n]*/g, '') // line comments
-    .replace(/[,\uFEFF]/g, ' ') // commas and BOM are ignored tokens in GraphQL: normalize so `,mutation` cannot slip through
-    .trim()
-  return /(^|[\s}])mutation\b/.test(stripped)
+  try {
+    const document = parseGraphQL(query, { noLocation: true })
+    return document.definitions.some(
+      (definition) =>
+        definition.kind === 'OperationDefinition' &&
+        definition.operation === 'mutation'
+    )
+  } catch (err) {
+    return true
+  }
 }
 
 /**
