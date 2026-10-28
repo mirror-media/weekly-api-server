@@ -35,7 +35,9 @@ function isMutation(query) {
     return true
   }
   try {
-    const document = parseGraphQL(query, { noLocation: true })
+    // maxTokens bounds the synchronous parse work an anonymous caller can
+    // force onto the event loop; real operations are far below this.
+    const document = parseGraphQL(query, { noLocation: true, maxTokens: 5000 })
     return document.definitions.some(
       (definition) =>
         definition.kind === 'OperationDefinition' &&
@@ -109,8 +111,10 @@ export function createGraphQLProxy({
 
     // Express does not parse request bodies by itself; the mutation gate
     // below needs `req.body.query`. The consumed stream is replayed to the
-    // upstream by `fixRequestBody` in `onProxyReq`.
-    express.json({ limit: '2mb' }),
+    // upstream by `replayParsedBody` in `onProxyReq`. The limit matches the
+    // upstream Keystone body-parser default (100kb), so nothing that this
+    // rejects would have been accepted upstream anyway.
+    express.json({ limit: '100kb' }),
 
     // verify access token if needed
     /** @type {express.RequestHandler} */
@@ -247,6 +251,23 @@ export function createGraphQLProxy({
      * @type {express.ErrorRequestHandler}
      */
     (err, req, res, next) => {
+      // body-parser errors carry `status`/`type`: oversized payloads and
+      // malformed JSON are client errors, not server errors.
+      if (err.type === 'entity.too.large') {
+        res.status(statusCodes.payloadTooLarge).send({
+          status: 'error',
+          error: 'Request body exceeds the allowed size.',
+        })
+        return
+      }
+      if (typeof err.type === 'string' && err.type.startsWith('entity.')) {
+        res.status(statusCodes.badRequest).send({
+          status: 'error',
+          error: 'Request body is not valid JSON.',
+        })
+        return
+      }
+
       switch (err.name) {
         case 'AuthError': {
           console.log(
