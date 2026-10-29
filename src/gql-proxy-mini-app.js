@@ -1,7 +1,9 @@
 import { statusCodes } from './constants'
 // @ts-ignore `@twreporter/errors` does not have tyepscript definition file yet
 import errors from '@twreporter/errors'
+import crypto from 'crypto'
 import express from 'express'
+import { parse as parseGraphQL } from 'graphql'
 import middlewareCreator from './middlewares'
 import { createProxyMiddleware } from 'http-proxy-middleware'
 
@@ -17,12 +19,82 @@ import { createProxyMiddleware } from 'http-proxy-middleware'
  *  @param {string} [opts.sessionTokenKey]
  *  @returns {express.Router}
  */
+/**
+ * Decide whether a GraphQL request body contains a mutation operation,
+ * using the same grammar the backend executes (graphql-js `parse`), so
+ * lexer quirks (ignored commas/BOM, comments, block strings, multiple
+ * operations selected via `operationName`) cannot produce a document that
+ * reads as a query here but executes as a mutation upstream.
+ * Unparseable input is treated as a mutation (fail closed) and left for
+ * the backend to reject.
+ * @param {unknown} query
+ * @returns {boolean}
+ */
+function isMutation(query) {
+  if (typeof query !== 'string') {
+    return true
+  }
+  try {
+    // maxTokens bounds the synchronous parse work an anonymous caller can
+    // force onto the event loop; real operations are far below this.
+    const document = parseGraphQL(query, { noLocation: true, maxTokens: 5000 })
+    return document.definitions.some(
+      (definition) =>
+        definition.kind === 'OperationDefinition' &&
+        definition.operation === 'mutation'
+    )
+  } catch (err) {
+    return true
+  }
+}
+
+/**
+ * Re-send the body consumed by `express.json()` to the upstream request.
+ * Unlike http-proxy-middleware's `fixRequestBody`, this does not re-check
+ * the Content-Type header (whose case-insensitive variants express parses
+ * but `fixRequestBody` misses, leaving the upstream waiting for a body),
+ * and it normalizes the framing headers so chunked requests are not
+ * forwarded with both Transfer-Encoding and Content-Length.
+ * @param {import('http').ClientRequest} proxyReq
+ * @param {import('express').Request} req
+ */
+function replayParsedBody(proxyReq, req) {
+  // `_body` is set by body-parser once it has consumed the stream.
+  // @ts-ignore express sets this flag at runtime
+  if (!req._body || req.body === undefined) {
+    return
+  }
+  const body = JSON.stringify(req.body)
+  proxyReq.removeHeader('Transfer-Encoding')
+  proxyReq.removeHeader('Content-Encoding')
+  proxyReq.setHeader('Content-Type', 'application/json')
+  proxyReq.setHeader('Content-Length', Buffer.byteLength(body))
+  proxyReq.write(body)
+}
+
+/**
+ * Constant-time string comparison that never throws on length mismatch.
+ * @param {string} a
+ * @param {string} b
+ * @returns {boolean}
+ */
+function timingSafeEqualStr(a, b) {
+  const bufA = Buffer.from(String(a))
+  const bufB = Buffer.from(String(b))
+  if (bufA.length !== bufB.length) {
+    return false
+  }
+  return crypto.timingSafeEqual(bufA, bufB)
+}
+
 export function createGraphQLProxy({
   jwtSecret,
   proxyOrigin,
   proxyPath,
   sessionTokenKey,
   bypassAuthorization = false,
+  internalApiKey = '',
+  allowAuthenticatedMutations = false,
 }) {
   // create express mini app
   const router = express.Router()
@@ -37,6 +109,14 @@ export function createGraphQLProxy({
   router.post(
     proxyPath,
 
+    // Express does not parse request bodies by itself; the mutation gate
+    // below needs `req.body.query`. The consumed stream is replayed to the
+    // upstream by `replayParsedBody` in `onProxyReq`. Real traffic includes
+    // weekly-external batch writes well over 100kb (upstream Lilith accepts
+    // up to 500mb); parse cost is already bounded by `maxTokens`, so 1mb
+    // only guards against pathological payloads.
+    express.json({ limit: '1mb' }),
+
     // verify access token if needed
     /** @type {express.RequestHandler} */
     (req, res, next) => {
@@ -49,6 +129,41 @@ export function createGraphQLProxy({
       // Otherwise, we skip authorization.
       // get to next middleware
       next()
+    },
+
+    // Reject writes from the public internet. A GraphQL mutation is allowed
+    // only when the caller is (a) an authenticated user on a proxy that opts
+    // in via `allowAuthenticatedMutations` (the member proxy, where Israfel's
+    // own ACL still applies), or (b) an internal writer presenting the shared
+    // key. Read-only queries are always allowed. Without this gate the
+    // backend CMS (gql strategy) applies no write access control, so anyone
+    // could create/update/delete.
+    /** @type {express.RequestHandler} */
+    (req, res, next) => {
+      if (!isMutation(req?.body?.query)) {
+        next()
+        return
+      }
+      // Only the member proxy may accept end-user tokens for writes;
+      // /access-token signs a token for any Firebase login, which must not
+      // grant CMS (content) write access.
+      if (allowAuthenticatedMutations && res?.locals?.auth) {
+        next()
+        return
+      }
+      const presentedKey = req.header('X-Internal-Api-Key') || ''
+      if (
+        internalApiKey &&
+        presentedKey &&
+        timingSafeEqualStr(presentedKey, internalApiKey)
+      ) {
+        next()
+        return
+      }
+      res.status(statusCodes.unauthorized).send({
+        status: 'error',
+        error: 'Mutations require authentication or a valid internal API key.',
+      })
     },
 
     // proxy request to API GraphQL endpoint
@@ -72,6 +187,10 @@ export function createGraphQLProxy({
 
         proxyReq.setHeader('X-Access-Token-Scope', scope)
 
+        // The internal key is only meaningful to this proxy: never forward
+        // it, so it cannot end up in upstream logs or error payloads.
+        proxyReq.removeHeader('X-Internal-Api-Key')
+
         if (sessionTokenKey) {
           const sessionToken = res.locals[sessionTokenKey]
           // remove Authorization header to prevent authenication fail on gql side
@@ -87,11 +206,13 @@ export function createGraphQLProxy({
               proxyOrigin +
               proxyReq.path,
             ...res?.locals?.globalLogFields,
-            debugPayload: {
-              'req.headers': proxyReq.getHeaders(),
-            },
           })
         )
+
+        // express.json() consumed the request stream: re-send the parsed
+        // body. Must run after every setHeader above — it writes the body,
+        // which flushes the headers.
+        replayParsedBody(proxyReq, req)
       },
       onError: (
         err,
@@ -131,6 +252,23 @@ export function createGraphQLProxy({
      * @type {express.ErrorRequestHandler}
      */
     (err, req, res, next) => {
+      // body-parser errors carry `status`/`type`: oversized payloads and
+      // malformed JSON are client errors, not server errors.
+      if (err.type === 'entity.too.large') {
+        res.status(statusCodes.payloadTooLarge).send({
+          status: 'error',
+          error: 'Request body exceeds the allowed size.',
+        })
+        return
+      }
+      if (typeof err.type === 'string' && err.type.startsWith('entity.')) {
+        res.status(statusCodes.badRequest).send({
+          status: 'error',
+          error: 'Request body is not valid JSON.',
+        })
+        return
+      }
+
       switch (err.name) {
         case 'AuthError': {
           console.log(
