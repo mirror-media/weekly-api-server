@@ -111,10 +111,11 @@ export function createGraphQLProxy({
 
     // Express does not parse request bodies by itself; the mutation gate
     // below needs `req.body.query`. The consumed stream is replayed to the
-    // upstream by `replayParsedBody` in `onProxyReq`. The limit matches the
-    // upstream Keystone body-parser default (100kb), so nothing that this
-    // rejects would have been accepted upstream anyway.
-    express.json({ limit: '100kb' }),
+    // upstream by `replayParsedBody` in `onProxyReq`. Real traffic includes
+    // weekly-external batch writes well over 100kb (upstream Lilith accepts
+    // up to 500mb); parse cost is already bounded by `maxTokens`, so 1mb
+    // only guards against pathological payloads.
+    express.json({ limit: '1mb' }),
 
     // verify access token if needed
     /** @type {express.RequestHandler} */
