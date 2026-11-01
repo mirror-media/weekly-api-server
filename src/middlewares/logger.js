@@ -37,12 +37,13 @@ export function createLoggerMw(projectId) {
         severity: 'INFO',
         message: `Request: ${req.method} ${req.originalUrl}`,
         debugPayload: {
+          // Never log Authorization / Cookie headers or the request body:
+          // they carry access tokens, injected session cookies and, for
+          // authenticate mutations, plaintext passwords.
           'req.headers': {
             'Content-Length': req.get('Content-Length'),
             'Content-Type': req.get('Content-Type'),
-            Authorization: req.get('Authorization'),
           },
-          'req.body': req.body,
         },
         ...globalLogFields,
       })
