@@ -72,6 +72,7 @@ const envVar = {
     BYPASS_AUTHORIZATION === 'true' || BYPASS_AUTHORIZATION === '1',
   // Shared secret the internal writers (weekly-external, data-services) must
   // present in the `X-Internal-Api-Key` header to run GraphQL mutations.
+  // Member proxy: also identifies server-side callers such as the papermag flow.
   internalApiKey: INTERNAL_API_KEY || '',
 }
 

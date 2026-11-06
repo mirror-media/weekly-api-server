@@ -183,6 +183,7 @@ export function signAccessToken({ jwtSecret, jwtLifeTime }) {
       iat: nowTs,
       roles,
       scope,
+      email: res.locals.auth?.decodedIdToken?.email,
     }
 
     let token
@@ -280,6 +281,7 @@ export function signAccessTokenForInternalColleague({
       iat: nowTs,
       roles: ['staff'],
       scope,
+      email: res.locals.auth?.decodedIdToken?.email,
     }
 
     let token
