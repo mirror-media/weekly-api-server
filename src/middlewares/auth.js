@@ -17,6 +17,7 @@ let firebaseApp
  *
  *  @param {Object} [opts={}]
  *  @param {string} [opts.firebaseProjectId]
+ *  @param {boolean} [opts.checkRevoked=false] also refuse disabled accounts and revoked tokens
  *  @returns {express.RequestHandler} express middleware
  */
 export function verifyIdTokenByFirebaseAdmin(opts = {}) {
@@ -36,7 +37,10 @@ export function verifyIdTokenByFirebaseAdmin(opts = {}) {
       }
 
       // Verify and decode the JWT.
-      const decodedIdToken = await getAuth(firebaseApp).verifyIdToken(token)
+      const decodedIdToken = await getAuth(firebaseApp).verifyIdToken(
+        token,
+        Boolean(opts.checkRevoked)
+      )
 
       // set `res.locals.auth.decodedIdToken` for next middlewares
       res.locals.auth = {
