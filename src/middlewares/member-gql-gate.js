@@ -60,10 +60,12 @@ const ROOT_FIELD_RULES = {
     caller: CALLER.user,
     selection: flat('id', 'firebaseId'),
     argNames: ['data'],
-    allowArgs: ({ data }, uid) =>
+    allowArgs: ({ data }, uid, email) =>
       hasOnlyKeys(data, ['firebaseId', 'email']) &&
       data.firebaseId === uid &&
-      isNonEmptyString(data.email),
+      isNonEmptyString(data.email) &&
+      isNonEmptyString(email) &&
+      data.email.toLowerCase() === email.toLowerCase(),
   },
   // Israfel's `member` update filter limits the target to the caller's own
   // record, using the firebaseId in `X-Access-Token-Scope`.
@@ -162,10 +164,10 @@ function isSelectionAllowed(selectionSet, allowed) {
  * Decide whether a request body is allowed, using the same grammar the
  * backend executes (graphql-js `parse`).
  * @param {unknown} body
- * @param {{ caller: string, uid?: string }} identity
+ * @param {{ caller: string, uid?: string, email?: string }} identity
  * @returns {{ reason: string, rootField?: string } | { forwardBody: string }}
  */
-export function evaluateMemberRequest(body, { caller, uid }) {
+export function evaluateMemberRequest(body, { caller, uid, email }) {
   if (body === null || typeof body !== 'object' || Array.isArray(body)) {
     return { reason: 'body-not-single-object' }
   }
@@ -235,7 +237,7 @@ export function evaluateMemberRequest(body, { caller, uid }) {
   for (const arg of root.arguments ?? []) {
     args[arg.name.value] = valueFromASTUntyped(arg.value, variables ?? {})
   }
-  if (!hasOnlyKeys(args, rule.argNames) || !rule.allowArgs(args, uid)) {
+  if (!hasOnlyKeys(args, rule.argNames) || !rule.allowArgs(args, uid, email)) {
     return { reason: 'arguments-not-allowed', rootField }
   }
 
@@ -330,7 +332,11 @@ export function createMemberGqlGate({ jwtSecret, internalApiKey = '' }) {
         reject(statusCodes.unauthorized, 'token-without-subject')
         return
       }
-      evaluate({ caller: CALLER.user, uid })
+      evaluate({
+        caller: CALLER.user,
+        uid,
+        email: res.locals.auth?.decodedAccessToken?.email,
+      })
     })
   }
 }

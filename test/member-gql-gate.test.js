@@ -9,6 +9,7 @@ import { after, before, beforeEach, describe, it } from 'node:test'
 import zlib from 'node:zlib'
 import jwt from 'jsonwebtoken'
 import { createApp } from '../src/app'
+import { signAccessToken } from '../src/middlewares/auth'
 
 const adam = JSON.parse(
   fs.readFileSync(
@@ -21,9 +22,21 @@ const jwtSecret = 'test-secret'
 const internalApiKey = 'test-internal-key'
 const uid = 'uid-self'
 const scope = `read:posts read:member-info:${uid} write:member-info:${uid}`
-const token = jwt.sign({ sub: `mirror-weekly|${uid}`, scope }, jwtSecret, {
-  expiresIn: 600,
-})
+const email = 'n@example.test'
+const token = jwt.sign(
+  { sub: `mirror-weekly|${uid}`, scope, email },
+  jwtSecret,
+  {
+    expiresIn: 600,
+  }
+)
+const noEmailToken = jwt.sign(
+  { sub: `mirror-weekly|${uid}`, scope },
+  jwtSecret,
+  {
+    expiresIn: 600,
+  }
+)
 const expiredToken = jwt.sign(
   { sub: `mirror-weekly|${uid}`, scope },
   jwtSecret,
@@ -432,6 +445,37 @@ describe('rejected as a token holder', () => {
       400,
       '/member/graphql?query=%7Bmembers%7Bid%7D%7D'
     ))
+})
+
+describe('createmember email', () => {
+  const create = (value) => ({
+    query: adam.createMember,
+    variables: { firebaseId: uid, email: value },
+  })
+
+  it('forwards the email in the token', () =>
+    expectForwarded(create(email), asUser))
+  it('ignores case', () => expectForwarded(create(email.toUpperCase()), asUser))
+  it('rejects another email', () =>
+    expectBlocked(create('other@example.test'), asUser))
+  it('rejects a token with no email', () =>
+    expectBlocked(create(email), {
+      authorization: `Bearer ${noEmailToken}`,
+    }))
+})
+
+describe('access token', () => {
+  it('carries the Firebase account email', () => {
+    const res = {
+      locals: { auth: { decodedIdToken: { uid, email } } },
+    }
+    signAccessToken({ jwtSecret, jwtLifeTime: 60 })({}, res, () => {})
+    const decoded = jwt.verify(
+      res.locals.accessTokenPayload.access_token,
+      jwtSecret
+    )
+    assert.equal(decoded.email, email)
+  })
 })
 
 describe('forwarded body', () => {
