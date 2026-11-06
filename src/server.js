@@ -58,6 +58,7 @@ async function start() {
     const app = createApp({
       gcpProjectId: envVar.gcp.projectId,
       firebaseProjectId: envVar.firebase.projectId,
+      checkRevokedIdToken: envVar.firebase.checkRevoked,
       jwtSecret: envVar.jwt.secret,
       jwtLifeTime: envVar.jwt.lifetime,
       israfelProxyOrigin: envVar.apis.israfel.origin,
