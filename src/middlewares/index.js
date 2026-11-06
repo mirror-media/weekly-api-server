@@ -1,4 +1,5 @@
 import { createLoggerMw } from './logger'
+import { createMemberGqlGate } from './member-gql-gate'
 import { queryMemberInfo } from './member-info'
 import {
   verifyAccessToken,
@@ -15,6 +16,7 @@ const mws = {
   createLoggerMw,
   createContentGQLSessionTokenMw,
   createIsrafelSessionTokenMw,
+  createMemberGqlGate,
   queryMemberInfo,
   verifyAccessToken,
   verifyIdTokenByFirebaseAdmin,
