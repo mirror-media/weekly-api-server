@@ -164,9 +164,14 @@ export function createApp({
     })
   )
 
-  // The order of next two middlewares
+  // The order of next three middlewares
   // should not be changed.
+  // The gate decides whether a request reaches Member GQL at all.
   // We need to get session token before proxying requests to Member GQL.
+  app.use(
+    '/member/graphql',
+    middlewareCreator.createMemberGqlGate({ jwtSecret, internalApiKey })
+  )
   app.use(
     '/member/graphql',
     middlewareCreator.createIsrafelSessionTokenMw({
