@@ -3,6 +3,7 @@ const {
   JWT_LIFE_TIME, // seconds
   GCP_PROJECT_ID,
   FIREBASE_PROJECT_ID,
+  CHECK_REVOKED_ID_TOKEN,
   ISRAFEL_GQL_ORIGIN,
   WEEKLY_GQL_ORIGIN,
   CORS_ALLOW_ORIGINS,
@@ -41,6 +42,8 @@ const envVar = {
   },
   firebase: {
     projectId: FIREBASE_PROJECT_ID || 'mirror-weekly',
+    // Needs firebaseauth.users.get on the Firebase project.
+    checkRevoked: CHECK_REVOKED_ID_TOKEN === 'true',
   },
   apis: {
     israfel: {
@@ -69,6 +72,7 @@ const envVar = {
     BYPASS_AUTHORIZATION === 'true' || BYPASS_AUTHORIZATION === '1',
   // Shared secret the internal writers (weekly-external, data-services) must
   // present in the `X-Internal-Api-Key` header to run GraphQL mutations.
+  // Member proxy: also identifies server-side callers such as the papermag flow.
   internalApiKey: INTERNAL_API_KEY || '',
 }
 

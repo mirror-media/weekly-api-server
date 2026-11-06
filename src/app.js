@@ -23,6 +23,7 @@ import { sessionTokenKey } from './constants'
  *  @param {Object} opts
  *  @param {string} opts.gcpProjectId
  *  @param {string} opts.firebaseProjectId
+ *  @param {boolean} [opts.checkRevokedIdToken]
  *  @param {string} opts.jwtSecret
  *  @param {number} opts.jwtLifeTime
  *  @param {string} opts.weeklyProxyOrigin
@@ -41,6 +42,7 @@ import { sessionTokenKey } from './constants'
 export function createApp({
   gcpProjectId,
   firebaseProjectId,
+  checkRevokedIdToken = false,
   jwtSecret,
   jwtLifeTime,
   weeklyProxyOrigin,
@@ -71,7 +73,10 @@ export function createApp({
   // api route for granting access token
   app.post(
     '/access-token',
-    middlewareCreator.verifyIdTokenByFirebaseAdmin({ firebaseProjectId }), // check authentication
+    middlewareCreator.verifyIdTokenByFirebaseAdmin({
+      firebaseProjectId,
+      checkRevoked: checkRevokedIdToken,
+    }), // check authentication
     middlewareCreator.signAccessTokenForInternalColleague({
       jwtSecret,
       jwtLifeTime,
@@ -164,9 +169,14 @@ export function createApp({
     })
   )
 
-  // The order of next two middlewares
+  // The order of next three middlewares
   // should not be changed.
+  // The gate decides whether a request reaches Member GQL at all.
   // We need to get session token before proxying requests to Member GQL.
+  app.use(
+    '/member/graphql',
+    middlewareCreator.createMemberGqlGate({ jwtSecret, internalApiKey })
+  )
   app.use(
     '/member/graphql',
     middlewareCreator.createIsrafelSessionTokenMw({

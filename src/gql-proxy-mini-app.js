@@ -64,7 +64,10 @@ function replayParsedBody(proxyReq, req) {
   if (!req._body || req.body === undefined) {
     return
   }
-  const body = JSON.stringify(req.body)
+  // The member gate leaves the document it checked: send that, not the
+  // original body, so the backend executes exactly what the gate saw.
+  // @ts-ignore set by the member gate
+  const body = req.gatedGraphQLBody || JSON.stringify(req.body)
   proxyReq.removeHeader('Transfer-Encoding')
   proxyReq.removeHeader('Content-Encoding')
   proxyReq.setHeader('Content-Type', 'application/json')
