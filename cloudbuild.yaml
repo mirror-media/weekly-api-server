@@ -51,3 +51,6 @@ images: ['gcr.io/$PROJECT_ID/$_IMAGE_NAME:${BRANCH_NAME}_${SHORT_SHA}', 'gcr.io/
 substitutions:
   _IMAGE_NAME: '' # default value
   _CLOUD_RUN_SERVICE_NAME: '' # default value
+
+options:
+  logging: CLOUD_LOGGING_ONLY
